@@ -1,0 +1,21 @@
+pipeline:
+  embed_dim: 768
+  sentence_transformer_model: "all-mpnet-base-v2"
+  spacy_model: "en_core_web_sm"
+
+thresholds:
+  exact_deduplicate: true
+  near_duplicate_sim: 0.90
+  relevance_sim: 0.20
+
+credibility:
+  "reuters.com": 0.95
+  "bloomberg.com": 0.95
+  "ft.com": 0.90
+  "economictimes.indiatimes.com": 0.85
+  "business-standard.com": 0.80
+  "techcrunch.com": 0.60
+  "unknownblog.com": 0.30
+
+prompts:
+  fmcg_intent: "News about mergers, acquisitions or investments involving fast-moving consumer goods brands and manufacturers"

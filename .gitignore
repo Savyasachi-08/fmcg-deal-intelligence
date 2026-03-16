@@ -1,0 +1,19 @@
+# Environments & Secrets
+venv_nlp/
+.env
+
+# Execution Outputs
+output/
+data/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS/IDE Files
+.DS_Store
+.vscode/
+.idea/
