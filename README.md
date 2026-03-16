@@ -2,7 +2,7 @@
 
 An enterprise-grade, advanced Natural Language Processing (NLP) pipeline that simulates pulling global news sources and uses semantic embeddings to filter, deduplicate, and compile an authentic, business-friendly Executive Deal Newsletter for the FMCG sector.
 
-## 🌟 Key Features
+## Key Features
 
 1. **Config-Driven Architecture**: Uses `config.yaml` to securely adjust vector threshold sensitivity (e.g., matching intent at 0.20 cosine similarity) and define exact domain credibility rankings (Reuters > TechCrunch).
 2. **Deterministic & Semantic Deduplication**:
@@ -13,7 +13,7 @@ An enterprise-grade, advanced Natural Language Processing (NLP) pipeline that si
 4. **FMCG Intent Sieve & Vector Scoring**: Safely removes unrelated tech or pharma acquisitions by merging a fast regex keyword sieve with complex vector intent scoring matching exactly against defined FMCG parameters.
 5. **Business Output Delivery**: Passes ONLY pristine, de-hashed metrics into `gemini-2.0-flash` to write a structured narrative. The final result automatically exports natively to a styled `FMCG_Executive_Newsletter.docx` using `python-docx`.
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 fmcg-deal-intelligence/
@@ -32,7 +32,7 @@ fmcg-deal-intelligence/
 └── requirements.txt          # Advanced NLP dependencies (sentence-transformers, spacy, etc.)
 ```
 
-## 🚀 Setup & Execution
+## Setup & Execution
 
 ### 1. Environment Setup
 ```bash
