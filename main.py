@@ -1,4 +1,7 @@
 import os
+# Fix for macOS segmentation fault related to HuggingFace tokenizers and OpenMP
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["OMP_NUM_THREADS"] = "1"
 import pandas as pd
 from scripts.generate_jsonl import generate_jsonl
 from src.normalization import load_and_normalize
