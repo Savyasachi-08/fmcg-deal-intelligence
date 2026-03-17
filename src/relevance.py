@@ -7,8 +7,32 @@ from src.scoring_report import audit_report
 import re
 
 FMCG_KEYWORDS = [
-    "food", "beverage", "consumer goods", "personal care", "fmcg", "snack",
-    "skincare", "beauty", "cosmetics", "grocery", "nutrition", "chocolate"
+    "fmcg", "consumer goods", "cpg", "fast moving consumer goods",
+
+    "food", "beverage", "snack", "snacks", "dairy", "packaged food",
+    "processed food", "ready to eat", "frozen food", "confectionery",
+    "chocolate", "biscuits", "bakery", "noodles", "instant food",
+    "drinks", "juice", "tea", "coffee", "alcohol", "beer", "wine",
+
+    "grocery", "grocery delivery", "quick commerce", "q-commerce",
+    "supermarket", "retail chain", "kirana", "online grocery",
+
+    "personal care", "skincare", "beauty", "cosmetics", "haircare",
+    "oral care", "hygiene", "wellness", "fragrance",
+
+    "home care", "household", "cleaning products", "detergent",
+    "soap", "toiletries",
+
+    "nutrition", "health drinks", "supplements", "protein",
+    "ayurvedic", "herbal",
+
+    "packaged", "branded products", "consumer brand", "D2C brand",
+    "direct to consumer", "private label",
+
+    "D2C", "consumer startup", "consumer brand", "lifestyle brand",
+    "F&B startup", "food startup", "beverage startup",
+
+    "namkeen", "atta", "masala", "spices", "ready mix"
 ]
 
 def keyword_sieve(text: str) -> bool:

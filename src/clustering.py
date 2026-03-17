@@ -35,15 +35,20 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     embeddings = np.array(embeddings, dtype=np.float32)
     faiss.normalize_L2(embeddings)
     
-    # FMCG Intent vector
-    intent_prompt = config['prompts'].get('fmcg_intent', "News about mergers, acquisitions or investments involving fast-moving consumer goods brands and manufacturers")
-    intent_vector = embedder.encode([intent_prompt])
-    intent_vector = np.array(intent_vector, dtype=np.float32)
-    faiss.normalize_L2(intent_vector)
+    # FMCG Intent vectors (Multiple intents for better coverage)
+    intent_prompts = config['prompts'].get('fmcg_intents', [
+        "News about mergers, acquisitions or investments involving fast-moving consumer goods brands and manufacturers"
+    ])
+    intent_vectors = embedder.encode(intent_prompts)
+    intent_vectors = np.array(intent_vectors, dtype=np.float32)
+    faiss.normalize_L2(intent_vectors)
     
-    # Pre-compute all cosine scores and sieve results
-    cosine_scores = (embeddings @ intent_vector[0]).tolist()
-    df['tru_sim'] = cosine_scores
+    # Pre-compute all cosine scores against all intents and take the MAX
+    # embeddings shape: (N, 768) @ intent_vectors.T shape: (768, num_intents) -> (N, num_intents)
+    cosine_matrix = embeddings @ intent_vectors.T
+    max_cosine_scores = np.max(cosine_matrix, axis=1).tolist()
+    
+    df['tru_sim'] = max_cosine_scores
     df['passes_sieve'] = df.apply(lambda row: keyword_sieve(get_text_to_embed(row)), axis=1)
 
     # ── Step 2a: Keyword Sieve Pre-filter ────────────────────────────────────
@@ -126,7 +131,9 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
         max_sim = max(cluster_scores)
         centroid = np.mean(cluster_emb_arr, axis=0)
         faiss.normalize_L2(np.array([centroid], dtype=np.float32))
-        centroid_sim = float(np.dot(centroid, intent_vector[0]))
+        
+        # Centroid similarity is the max similarity against any intent vector
+        centroid_sim = float(np.max(centroid @ intent_vectors.T))
         
         cosine_ok = centroid_sim >= (threshold - 0.05) or max_sim >= threshold
         
