@@ -1,65 +1,59 @@
-# Advanced FMCG Deal Intelligence Pipeline
+# FMCG Deal Intelligence & Semantic Clustering Pipeline
 
-An enterprise-grade, advanced Natural Language Processing (NLP) pipeline that simulates pulling global news sources and uses semantic embeddings to filter, deduplicate, and compile an authentic, business-friendly Executive Deal Newsletter for the FMCG sector.
+An enterprise-grade NLP pipeline that fetches global news, uses semantic embeddings to cluster real-word events, and generates a business-ready Executive Newsletter for the FMCG sector.
 
 ## Key Features
 
-1. **Config-Driven Architecture**: Uses `config.yaml` to securely adjust vector threshold sensitivity (e.g., matching intent at 0.20 cosine similarity) and define exact domain credibility rankings (Reuters > TechCrunch).
-2. **Deterministic & Semantic Deduplication**:
-   - Computes canonical URLs and exact `SHA256` content hashes.
-   - Computes title + text chunk embeddings using `sentence-transformers` (`all-mpnet-base-v2`).
-   - Mathematically isolates semantic near-duplicates and drops the duplicate from the lowest credibility source.
-3. **Advanced Entity Extraction**: Uses `spaCy` (`en_core_web_sm`) to natively predict and pull `ORG` (Organizations), `GPE` (Geopolitical locations), and `MONEY` tokens directly from the news text.
-4. **FMCG Intent Sieve & Vector Scoring**: Safely removes unrelated tech or pharma acquisitions by merging a fast regex keyword sieve with complex vector intent scoring matching exactly against defined FMCG parameters.
-5. **Business Output Delivery**: Passes ONLY pristine, de-hashed metrics into `gemini-2.0-flash` to write a structured narrative. The final result automatically exports natively to a styled `FMCG_Executive_Newsletter.docx` using `python-docx`.
+1. **Dual-Gate Relevance Filter**: Uses a high-speed keyword sieve and **Multiple-Intent Cosine Similarity** (matching against 10 specific deal types like Acquisitions, D2C Funding, and PE Stakes) to ensure 99% FMCG relevance.
+2. **Semantic Clustering (HDBSCAN)**: Groups related articles from different sources into single "Real-World Events" using semantic embeddings (`all-mpnet-base-v2`), avoiding redundant reporting.
+3. **Intra-Cluster Deduplication**: Selects the most credible representative article (Ranked: Reuters > FT > Others) for each event, removing near-duplicates.
+4. **Config-Driven Heuristics**: Fine-tune vector thresholds, source credibility, and sector keywords directly in `config.yaml`.
+5. **Gemini-Powered Newsletter**: High-quality business impact analysis and executive summaries generated via `gemini-2.0-flash`, exported to a professional Word document.
 
 ## Project Structure
 
 ```text
 fmcg-deal-intelligence/
-├── config.yaml               # Credibility heuristics and Embedding thresholds
-├── data/
-│   └── sample_news.jsonl     # Automatically simulated mock data (FMCG, Tech, Exact Duplicates)
+├── config.yaml               # Thresholds, Intents, and Source Credibility
 ├── scripts/
-│   └── generate_jsonl.py     # Script to write the initial mock JSONL datastream
+│   └── fetch_live_data.py    # Live RSS fetching for FMCG & Automobile sectors
 ├── src/
-│   ├── normalization.py      # Cleans links, maps dates, hashes exact duplicates
-│   ├── deduplication.py      # Creates PyTorch MPNet embeddings, drops nearest-neighbor redundancies
-│   ├── extraction.py         # SpaCy NLP Named Entity Recognition map
-│   ├── relevance.py          # Intent Vector mapping to FMCG keywords and dropping low-scoring outliers
-│   └── llm.py                # Constructs the Gemini Business report and DOCX file
-├── main.py                   # Orchestrator running the complete chronological pipeline
-└── requirements.txt          # Advanced NLP dependencies (sentence-transformers, spacy, etc.)
+│   ├── normalization.py      # URL/Date normalization and Exact-Dedup (SHA256)
+│   ├── clustering.py         # HDBSCAN clustering, Multi-Intent filtering, and Near-Dedup
+│   ├── extraction.py         # SpaCy NER (ORG, GPE, MONEY)
+│   ├── relevance.py          # FMCG Keyword Sieve
+│   └── llm.py                # Gemini orchestration and DOCX generation
+├── main.py                   # Orchestrator (Routes: 'sample' or 'live')
+└── requirements.txt          # sentence-transformers, hdbscan, faiss-cpu, etc.
 ```
 
 ## Setup & Execution
 
 ### 1. Environment Setup
 ```bash
-# Create local virtual environment
 python3 -m venv venv_nlp
 source venv_nlp/bin/activate
-
-# Install core dependencies
 pip install -r requirements.txt
-
-# Download spaCy English Model
 python -m spacy download en_core_web_sm
 ```
 
-### 2. Configure Google Gemini API Key
-Create a `.env` file in the root `fmcg-deal-intelligence/` directory:
+### 2. Configure Gemini API
+Create a `.env` file in the root:
 ```
-GEMINI_API_KEY="your_actual_gemini_key_here"
+GEMINI_API_KEY="your_key_here"
 ```
 
 ### 3. Run the Pipeline
-Simply execute the main orchestration script:
+Run with **Sample Data** (Predefined scenarios):
 ```bash
-PYTHONPATH=. python main.py
+python main.py sample
 ```
 
-### 4. Output results
-Once finished, the directory will yield your results:
-- `output/advanced_nlp_clean_deals.csv`: Contains the pure surviving entities and their NLP token logic.
-- `output/FMCG_Executive_Newsletter.docx`: The final drafted business intelligence word document.
+Run with **Live News** (Fetches latest RSS from Reuters/Google News):
+```bash
+python main.py live
+```
+
+## Output Results
+- `output/advanced_nlp_clustered_topics.csv`: The final deduplicated and clustered dataset.
+- `output/FMCG_Executive_Newsletter.docx`: The final drafted business newsletter.
