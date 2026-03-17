@@ -6,6 +6,7 @@ from src.deduplication import semantic_deduplicate
 from src.extraction import extract_metadata
 from src.relevance import score_relevance
 from src.llm import generate_newsletter
+from src.scoring_report import audit_report
 
 def run_advanced_pipeline():
     print("==================================================")
@@ -39,6 +40,10 @@ def run_advanced_pipeline():
     # 6. Final LLM Generation
     print("\n>>> Phase 6: Gemini Newsletter Formatting <<<")
     generate_newsletter(relevant_df, output_dir="output")
+
+    # 7. Export Similarity Audit Report
+    print("\n>>> Phase 7: Exporting Similarity Audit Report <<<")
+    audit_report.export(output_dir="output")
 
     print("\n==================================================")
     print("Advanced NLP Pipeline Completed Successfully.")

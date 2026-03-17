@@ -10,7 +10,8 @@ try:
 except OSError:
     print("Downloading spacy model...")
     import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    import sys
+    subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
 def extract_entities(text: str) -> dict:
@@ -30,12 +31,22 @@ def heuristic_category(text: str) -> str:
     """Heuristic logic to assign deal types and FMCG buckets."""
     text = text.lower()
     
-    # Deal Type
-    if any(w in text for w in ['acquire', 'acquisition', 'buyout', 'buys']):
+    # Deal Type (ordered by specificity — more specific patterns first)
+    if any(w in text for w in ['acquire', 'acquisition', 'buyout', 'buys', 'takeover', 'purchased']):
         deal = "Acquisition"
-    elif any(w in text for w in ['merger', 'merges']):
+    elif any(w in text for w in ['merger', 'merges', 'merged with', 'merge with']):
         deal = "Merger"
-    elif any(w in text for w in ['stake', 'investment', 'invests', 'funding']):
+    elif any(w in text for w in ['joint venture', 'jv', 'co-invest', 'co-owned']):
+        deal = "Joint Venture"
+    elif any(w in text for w in ['divest', 'divestiture', 'sells off', 'sold off', 'spins off', 'spinoff', 'carve-out', 'carve out']):
+        deal = "Divestiture"
+    elif any(w in text for w in ['ipo', 'initial public offering', 'goes public', 'public listing', 'listed on']):
+        deal = "IPO/Public Offering"
+    elif any(w in text for w in ['partnership', 'partners with', 'alliance', 'strategic alliance', 'collaboration', 'collaborates']):
+        deal = "Partnership/Alliance"
+    elif any(w in text for w in ['licensing', 'license agreement', 'distribution agreement', 'franchise', 'franchising']):
+        deal = "Licensing/Distribution"
+    elif any(w in text for w in ['stake', 'investment', 'invests', 'funding', 'fundraise', 'series a', 'series b', 'series c', 'venture capital', 'private equity']):
         deal = "Investment/Stake"
     else:
         deal = "Other"

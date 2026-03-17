@@ -6,3 +6,4 @@ python-docx
 sentence-transformers
 spacy
 pyyaml
+faiss-cpu
