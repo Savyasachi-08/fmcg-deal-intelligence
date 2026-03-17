@@ -27,12 +27,12 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
     You MUST output a valid JSON object ONLY. No markdown, no conversational text.
     Your output must match this exact schema:
     {{
-        "executive_summary": "A 2-3 sentence overview of the CURRENT FMCG deal landscape based on these articles.",
+        "executive_summary": "A 2-3 sentence overview of the CURRENT FMCG deal landscape, synthesizing the grouped topics.",
         "deals": [
             {{
-                "company_name": "Primary company name",
-                "deal_type": "Acquisition / Stake / Merger",
-                "strategic_impact": "2-3 sentences explaining the business value and why a CEO should care about this.",
+                "company_name": "Primary company name involved in this specific Topic/Event",
+                "deal_type": "Acquisition / Stake / Merger / Government Program",
+                "strategic_impact": "2-3 sentences explaining the overarching business value of this Topic/Event and why a CEO should care.",
                 "financials": "Extracted monetary value or 'Undisclosed'",
                 "location": "Countries/Regions",
                 "source": "domain name"
@@ -41,12 +41,12 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
     }}
     
     RULES:
-    1. Select ONLY the TOP 10 most globally significant or highest-value deals from the input JSON. 
-    2. If there are fewer than 10 deals, include all of them.
-    3. Do not include more than 10 items in the "deals" list.
-    4. Focus ENTIRELY on business value and strategic impact. Do not mention the data pipeline.
+    1. You are receiving pre-clustered Topics representing distinct real-world events. 
+    2. Select ONLY the TOP 10 most globally significant or highest-value Topics/Events. 
+    3. If there are fewer than 10 Topics, include all of them.
+    4. Focus ENTIRELY on business value and strategic impact. Do not mention "clusters", "topics", "algorithms", or the data pipeline.
     
-    Input JSON Records:
+    Input JSON Records (Clustered Topics):
     {text_data}
     """
     
@@ -60,31 +60,61 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
         response.raise_for_status()
         data = response.json()
         raw_text = data['candidates'][0]['content']['parts'][0]['text']
-        return json.loads(raw_text)
+        
+        # Strip markdown fences if Gemini wraps the JSON (happens with longer responses)
+        raw_text = raw_text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("```", 2)[-1]  # drop opening fence
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+            raw_text = raw_text.rsplit("```", 1)[0]  # drop closing fence
+        raw_text = raw_text.strip()
+        
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError as je:
+            # Fallback: extract the outermost { ... } block via regex
+            import re
+            print(f"Raw Gemini response (first 500 chars): {raw_text[:500]}")
+            match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except Exception:
+                    pass
+            raise je
+
     except Exception as e:
         print(f"Error calling Gemini or parsing JSON: {e}")
         return {"executive_summary": "Failed to proxy Gemini API.", "deals": []}
 
-def generate_newsletter(df: pd.DataFrame, output_dir: str = "output"):
+def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "output"):
     """
-    Takes the final filtered DataFrame, passes structured metrics to Gemini, 
-    and saves the output to a clean business-friendly DOCX file.
+    Takes the structured topics list from the semantic clustering phase, passes them to Gemini for impact analysis, 
+    and iterates via Python to compile the output to a clean business-friendly DOCX file.
     """
     os.makedirs(output_dir, exist_ok=True)
     df = df.copy()
     
-    # Export CSV Backup
-    csv_path = os.path.join(output_dir, "advanced_nlp_clean_deals.csv")
+    # Export CSV Backup of the newly filtered representative items
+    csv_path = os.path.join(output_dir, "advanced_nlp_clustered_topics.csv")
     df.to_csv(csv_path, index=False)
-    print(f"Cleaned NLP dataset exported to {csv_path}")
+    print(f"Clustered NLP dataset exported to {csv_path}")
 
-    # Format JSON payload dropping ALL technical/pipeline metadata before passing to Gemini
-    cols_to_drop = ['content', 'content_hash', 'canonical_url', 'id', 'fetched_at', 'passes_sieve', 'tru_sim', 'language']
-    context_df = df.drop(columns=[c for c in cols_to_drop if c in df.columns], errors='ignore')
-        
-    json_data = context_df.to_json(orient="records")
+    # Sanitize text fields to prevent JSON encoding issues in Gemini's response
+    safe_topics = []
+    for t in topics_json:
+        safe_t = dict(t)
+        safe_t['topic_title'] = safe_t.get('topic_title', '').replace('\n', ' ').replace('\r', '')
+        rep = dict(safe_t.get('representative_article', {}))
+        rep['title'] = rep.get('title', '').replace('\n', ' ').replace('\r', '')
+        rep['summary'] = rep.get('summary', '').replace('\n', ' ').replace('\r', '').replace('"', "'")
+        safe_t['representative_article'] = rep
+        safe_topics.append(safe_t)
     
-    print("Drafting advanced NLP newsletter via Gemini...")
+    json_data = json.dumps(safe_topics, ensure_ascii=True)
+    
+    print("Drafting advanced NLP newsletter via Gemini (Topic-Based)...")
     newsletter_json = prompt_gemini_newsletter(json_data)
     
     from docx import Document

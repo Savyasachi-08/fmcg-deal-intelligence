@@ -6,7 +6,7 @@ pipeline:
 thresholds:
   exact_deduplicate: true
   near_duplicate_sim: 0.90
-  relevance_sim: 0.20
+  relevance_sim: 0.25
 
 credibility:
   "reuters.com": 0.95
