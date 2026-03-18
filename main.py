@@ -49,10 +49,14 @@ def run_advanced_pipeline(mode="sample"):
     # We update the topics_json with the new spaCy extractions
     for i, (_, row) in enumerate(extracted_df.iterrows()):
         # Match back to the topics list using positional enumeration
-        topics_json[i]['representative_article']['deal_type'] = row.get('predicted_deal_type', 'Other')
-        topics_json[i]['representative_article']['organizations'] = row.get('organizations', '')
-        topics_json[i]['representative_article']['locations'] = row.get('locations', '')
-        topics_json[i]['representative_article']['monetary_values'] = row.get('monetary_values', '')
+        
+        # We inject the extracted metadata into the top representative article of the cluster
+        if topics_json[i].get('articles'):
+            top_article = topics_json[i]['articles'][0]
+            top_article['deal_type'] = row.get('predicted_deal_type', 'Other')
+            top_article['organizations'] = row.get('organizations', '')
+            top_article['locations'] = row.get('locations', '')
+            top_article['monetary_values'] = row.get('monetary_values', '')
         
         # Remove the pandas Series before JSON serialization
         if 'raw_row' in topics_json[i]:

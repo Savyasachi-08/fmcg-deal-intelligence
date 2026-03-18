@@ -11,41 +11,37 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 GEMINI_MODEL = "gemini-2.0-flash"
 
-def prompt_gemini_newsletter(text_data: str) -> dict:
+def prompt_gemini_cluster(text_data: str) -> dict:
     if not GEMINI_API_KEY:
         print("WARNING: GEMINI_API_KEY not found. Mocking newsletter.")
-        return {"executive_summary": "API mocked.", "deals": []}
+        return {"headline": "Mocked Headline", "bullet_points": ["Mocked bullet point"], "top_2_links": []}
 
     url = f"{GEMINI_URL.format(GEMINI_MODEL)}?key={GEMINI_API_KEY}"
     
     system_prompt = f"""
     You are an expert FMCG financial analyst. 
-    You have been provided with a JSON array of highly confident news articles mapped with extracted ORG, GPE, and MONEY entities.
+    You have been provided with a JSON array of news articles that all relate to the EXACT SAME real-world event or deal.
     
     CRITICAL INSTRUCTION:
     You MUST output a valid JSON object ONLY. No markdown, no conversational text.
     Your output must match this exact schema:
     {{
-        "executive_summary": "A 2-3 sentence overview of the CURRENT FMCG deal landscape, synthesizing the grouped topics.",
-        "deals": [
-            {{
-                "company_name": "Primary company name involved in this specific Topic/Event",
-                "deal_type": "Acquisition / Stake / Merger / Government Program",
-                "strategic_impact": "2-3 sentences explaining the overarching business value of this Topic/Event and why a CEO should care.",
-                "financials": "Extracted monetary value or 'Undisclosed'",
-                "location": "Countries/Regions",
-                "source": "domain name",
-                "news_link": "Exact URL link to the original article"
-            }}
+        "headline": "A single, highly professional business headline summarizing this unified event",
+        "bullet_points": [
+            "A concise bullet point capturing key financial facts or deal structure",
+            "A concise bullet point capturing strategic impact, rationale, or locations"
+        ],
+        "sources": [
+            {{"name": "Name of the publisher (e.g., Reuters, Bloomberg)", "url": "exact url"}}
         ]
     }}
     
     RULES:
-    1. You are receiving pre-clustered Topics representing distinct real-world events. 
-    2. You MUST process and include EVERY SINGLE TOPIC provided in the input array. Do not arbitrarily skip or filter any topics.
-    3. Focus ENTIRELY on business value and strategic impact. Do not mention "clusters", "topics", "algorithms", or the data pipeline.
+    1. Synthesize all the provided articles into one coherent view of the event.
+    2. Write NO MORE THAN 3-4 bullet points.
+    3. The sources array must contain maximum 2 top sources from the provided list.
     
-    Input JSON Records (Clustered Topics):
+    Input JSON Records (Articles for this Event):
     {text_data}
     """
     
@@ -62,10 +58,8 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
         response = requests.post(url, json=payload)
         response.raise_for_status()
         data = response.json()
-        raw_text = data['candidates'][0]['content']['parts'][0]['text']
+        raw_text = data['candidates'][0]['content']['parts'][0]['text'].strip()
         
-        # gemini sometimes wraps output in markdown fences
-        raw_text = raw_text.strip()
         if raw_text.startswith("```"):
             raw_text = raw_text.split("```", 2)[-1]
             if raw_text.startswith("json"):
@@ -77,7 +71,6 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
             return json.loads(raw_text)
         except json.JSONDecodeError as je:
             import re
-            print(f"Raw Gemini response (first 500 chars): {raw_text[:500]}")
             match = re.search(r'\{.*\}', raw_text, re.DOTALL)
             if match:
                 try:
@@ -87,8 +80,8 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
             raise je
 
     except Exception as e:
-        print(f"Error calling Gemini or parsing JSON: {e}")
-        return {"executive_summary": "Failed to proxy Gemini API.", "deals": []}
+        print(f"Error parsing Gemini response: {e}")
+        return {"headline": "Error Processing Cluster", "bullet_points": [str(e)], "sources": []}
 
 def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "output"):
     os.makedirs(output_dir, exist_ok=True)
@@ -98,46 +91,88 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
     df.to_csv(csv_path, index=False)
     print(f"Clustered NLP dataset exported to {csv_path}")
 
-    # sanitize before serializing to avoid json encoding issues
     safe_topics = []
     for t in topics_json:
         safe_t = dict(t)
         safe_t['topic_title'] = safe_t.get('topic_title', '').replace('\n', ' ').replace('\r', '')
-        rep = dict(safe_t.get('representative_article', {}))
-        rep['title'] = rep.get('title', '').replace('\n', ' ').replace('\r', '')
-        rep['summary'] = rep.get('summary', '').replace('\n', ' ').replace('\r', '').replace('"', "'")
-        rep['link'] = rep.get('link', '')
-        safe_t['representative_article'] = rep
+        
+        safe_articles = []
+        for art in safe_t.get('articles', []):
+            safe_art = dict(art)
+            safe_art['title'] = safe_art.get('title', '').replace('\n', ' ')
+            safe_art['summary'] = safe_art.get('summary', '').replace('\n', ' ').replace('"', "'")
+            safe_articles.append(safe_art)
+            
+        safe_t['articles'] = safe_articles
         safe_topics.append(safe_t)
+        
+    # --- Generate Auxiliary Cluster Breakdown Report ---
+    from docx import Document
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     
-    print("Drafting advanced NLP newsletter via Gemini (Topic-Based)...")
+    breakdown_path = os.path.join(output_dir, "Cluster_Breakdown_Report.docx")
+    b_doc = Document()
+    b_header = b_doc.add_heading('FMCG Cluster Analytics & Source Breakdown', 0)
+    b_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    for i, topic in enumerate(safe_topics, 1):
+        c_title = topic.get('topic_title', 'Unknown Topic')
+        b_doc.add_heading(f"Cluster {i}: {c_title}", level=2)
+        b_doc.add_paragraph(f"Total Articles in Cluster: {len(topic.get('articles', []))}\n")
+        
+        for art in topic.get('articles', []):
+            p = b_doc.add_paragraph(style='List Bullet')
+            p.add_run(f"[{str(art.get('source', 'Unknown')).upper()}] ").bold = True
+            p.add_run(str(art.get('title', 'No Title')))
+            p_link = b_doc.add_paragraph(str(art.get('link', '')))
+            p_link.style.font.size = Pt(8)
+            
+    b_doc.save(breakdown_path)
+    print(f"Exported underlying raw cluster architecture to {breakdown_path}")
+    # ---------------------------------------------------
+        
+    print(f"\n[Summary] Total valid deal clusters formed: {len(safe_topics)}")
+    print("--- Top Clusters Breakdown ---")
+    for i, topic in enumerate(safe_topics[:10], 1):
+        print(f"  {i}. {topic.get('topic_title', 'Unknown Topic')[:60]}... -> {len(topic.get('articles', []))} articles")
+    print("------------------------------\n")
+    
+    print("Drafting advanced NLP newsletter via Gemini (Cluster-Based)...")
     all_deals = []
-    exec_summary = ""
-    chunk_size = 10
-    max_calls = 2
     
-    # batch into chunks so we always hit 10 deals even when topics > 10
-    for i in range(0, min(len(safe_topics), chunk_size * max_calls), chunk_size):
-        chunk = safe_topics[i:i + chunk_size]
-        json_data = json.dumps(chunk, ensure_ascii=True)
-        print(f"  -> Sending batch of {len(chunk)} topics to Gemini...")
+    # Process up to 10 clusters (1 API call per cluster)
+    for topic in safe_topics[:10]:
+        print(f"  -> Sending cluster '{topic['topic_title'][:50]}...' to Gemini...")
+        json_data = json.dumps(topic['articles'], ensure_ascii=True)
+        chunk_json = prompt_gemini_cluster(json_data)
+        all_deals.append(chunk_json)
         
-        chunk_json = prompt_gemini_newsletter(json_data)
-        
-        if not exec_summary:
-            exec_summary = chunk_json.get("executive_summary", "")
-            
-        all_deals.extend(chunk_json.get("deals", []))
-        
-        if len(all_deals) >= 10:
-            break
-            
-    newsletter_json = {
-        "executive_summary": exec_summary or "Summary unavailable.",
-        "deals": all_deals[:10]
-    }
+    print("  -> Generating final Executive Summary...")
+    headlines = "\n".join([f"- {d.get('headline', '')}" for d in all_deals])
+    exec_prompt = f"""
+    You are an expert FMCG financial analyst.
+    Write a 2-3 sentence executive summary synthesizing the overall landscape of the following {len(all_deals)} recent FMCG deal activities.
+    Output strictly the raw text summary string. No json, no intro text.
     
+    Headlines:
+    {headlines}
+    """
+    
+    exec_summary = "FMCG Deal activities mapped successfully alongside source analysis."
+    if GEMINI_API_KEY:
+        url = f"{GEMINI_URL.format(GEMINI_MODEL)}?key={GEMINI_API_KEY}"
+        payload = {
+            "contents": [{"parts": [{"text": exec_prompt}]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1000}
+        }
+        try:
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
+            exec_summary = response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        except Exception as e:
+            print(f"Warning: Exec summary proxy failed: {e}")
+            
     from docx import Document
     from docx.shared import Pt
     from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -150,29 +185,26 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
     doc.add_paragraph(f"Report Date: {datetime.now().strftime('%B %d, %Y')}\n")
     
     doc.add_heading('Executive Summary', level=1)
-    doc.add_paragraph(newsletter_json.get("executive_summary", "Summary unavailable."))
+    doc.add_paragraph(exec_summary)
     
-    deals = newsletter_json.get("deals", [])
     doc.add_heading('Top Deals This Period', level=1)
     
-    for deal in deals:
-        deal_title = f"{deal.get('company_name', 'Unknown Company')} - {deal.get('deal_type', 'Deal')}"
-        doc.add_heading(deal_title, level=2)
+    for deal in all_deals:
+        doc.add_heading(deal.get('headline', 'Strategic FMCG Deal'), level=2)
         
-        def add_bold_line(label, value):
+        for bullet in deal.get('bullet_points', []):
+            doc.add_paragraph(str(bullet), style='List Bullet')
+            
+        sources = deal.get('sources', [])
+        if sources:
             p_line = doc.add_paragraph()
-            run = p_line.add_run(f"{label}: ")
+            run = p_line.add_run("\nSources:")
             run.bold = True
-            p_line.add_run(str(value))
-
-        add_bold_line("Strategic Impact", deal.get('strategic_impact', 'N/A'))
-        add_bold_line("Financials / Value", deal.get('financials', 'Undisclosed'))
-        add_bold_line("Key Locations", deal.get('location', 'Unknown'))
-        add_bold_line("Source", deal.get('source', 'Unknown'))
-        
-        link = deal.get('news_link', '')
-        if link:
-            add_bold_line("Original Article", link)
+            for src in sources:
+                name = src.get('name', 'Link')
+                url = src.get('url', '')
+                if url and str(url).startswith('http'):
+                    doc.add_paragraph(f"{name}: {url}")
             
         doc.add_paragraph()
         

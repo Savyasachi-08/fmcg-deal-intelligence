@@ -8,9 +8,9 @@ import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
-FMCG_URL = "https://news.google.com/rss/search?q=(FMCG%20OR%20%22consumer%20goods%22)%20(stake%20OR%20investment%20OR%20invests%20OR%20funding%20OR%20fundraise%20OR%20%22series%20A%22%20OR%20%22series%20B%22%20OR%20%22venture%20capital%22%20OR%20%22private%20equity%22%20OR%20merger%20OR%20acquisition)%20(site:reuters.com%20OR%20site:bloomberg.com%20OR%20site:ft.com%20OR%20site:economictimes.indiatimes.com%20OR%20site:business-standard.com%20OR%20site:techcrunch.com)%20when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+FMCG_URL = "https://news.google.com/rss/search?q=(FMCG%20OR%20%22consumer%20goods%22)%20(stake%20OR%20investment%20OR%20invests%20OR%20funding%20OR%20fundraise%20OR%20%22series%20A%22%20OR%20%22series%20B%22%20OR%20%22venture%20capital%22%20OR%20%22private%20equity%22%20OR%20merger%20OR%20acquisition)%20(site:reuters.com%20OR%20site:bloomberg.com%20OR%20site:ft.com%20OR%20site:economictimes.indiatimes.com%20OR%20site:business-standard.com%20OR%20site:techcrunch.com)%20when:7d&hl=en-IN&gl=IN&ceid=IN:en"
 
-AUTO_URL = "https://news.google.com/rss/search?q=(automobile%20OR%20EV%20OR%20%22electric%20vehicle%22)%20(stake%20OR%20investment%20OR%20funding%20OR%20fundraise%20OR%20%22venture%20capital%22%20OR%20%22private%20equity%22%20OR%20merger%20OR%20acquisition)%20(site:reuters.com%20OR%20site:bloomberg.com%20OR%20site:ft.com%20OR%20site:economictimes.indiatimes.com%20OR%20site:business-standard.com%20OR%20site:techcrunch.com)%20when:1d&hl=en-IN&gl=IN&ceid=IN:en"
+AUTO_URL = "https://news.google.com/rss/search?q=(automobile%20OR%20EV%20OR%20%22electric%20vehicle%22)%20(stake%20OR%20investment%20OR%20funding%20OR%20fundraise%20OR%20%22venture%20capital%22%20OR%20%22private%20equity%22%20OR%20merger%20OR%20acquisition)%20(site:reuters.com%20OR%20site:bloomberg.com%20OR%20site:ft.com%20OR%20site:economictimes.indiatimes.com%20OR%20site:business-standard.com%20OR%20site:techcrunch.com)%20when:7d&hl=en-IN&gl=IN&ceid=IN:en"
 
 def strip_html(text):
     if not text:

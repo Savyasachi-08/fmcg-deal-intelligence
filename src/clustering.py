@@ -94,17 +94,20 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                 if sim >= threshold:
                     article = fmcg_df.loc[idx]
                     audit_report.log_relevance_item(idx, str(title_preview), True, float(sim), float(threshold), "N/A", "ACCEPTED")
+                    
+                    article_dict = {
+                        "id": str(article.get('id', '')),
+                        "link": str(article.get('link', '')),
+                        "title": str(article['title']),
+                        "source": str(article['source_domain']),
+                        "date": str(article['published_at']),
+                        "summary": str(article.get('content', ''))[:300] + "..."
+                    }
+                    
                     valid_topics.append({
                         "topic_id": f"noise_{idx}",
                         "topic_title": str(article['title']),
-                        "representative_article": {
-                            "id": str(article.get('id', '')),
-                            "link": str(article.get('link', '')),
-                            "title": str(article['title']),
-                            "source": str(article['source_domain']),
-                            "date": str(article['published_at']),
-                            "summary": str(article.get('content', ''))[:300] + "..."
-                        },
+                        "articles": [article_dict],
                         "cluster_size": 1,
                         "fmcg_score": float(sim),
                         "raw_row": article
@@ -174,20 +177,25 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
         clean_df = cluster_df_copy.drop(cluster_df_copy.index[list(to_drop_local)])
         if clean_df.empty: continue
         
-        rep = clean_df.sort_values(by=['credibility', 'published_at'], ascending=[False, False]).iloc[0]
+        clean_df_sorted = clean_df.sort_values(by=['credibility', 'published_at'], ascending=[False, False])
+        rep = clean_df_sorted.iloc[0]
         print(f"  [CLUSTER {c_id} ACCEPTED] size={int(cluster_mask.sum())}, centroid={centroid_sim:.3f}, max={max_sim:.3f} | rep: {str(rep['title'])[:50]}...")
         
+        articles_list = []
+        for _, r in clean_df_sorted.iterrows():
+            articles_list.append({
+                "id": str(r.get('id', '')),
+                "link": str(r.get('link', '')),
+                "title": str(r['title']),
+                "source": str(r['source_domain']),
+                "date": str(r['published_at']),
+                "summary": str(r.get('content', ''))[:300] + "..."
+            })
+            
         valid_topics.append({
             "topic_id": f"cluster_{c_id}",
             "topic_title": str(rep['title']),
-            "representative_article": {
-                "id": str(rep.get('id', '')),
-                "link": str(rep.get('link', '')),
-                "title": str(rep['title']),
-                "source": str(rep['source_domain']),
-                "date": str(rep['published_at']),
-                "summary": str(rep.get('content', ''))[:300] + "..."
-            },
+            "articles": articles_list,
             "cluster_size": int(cluster_mask.sum()),
             "fmcg_score": float(max_sim),
             "raw_row": rep
