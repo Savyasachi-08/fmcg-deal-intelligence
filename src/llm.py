@@ -12,7 +12,6 @@ GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generat
 GEMINI_MODEL = "gemini-2.0-flash"
 
 def prompt_gemini_newsletter(text_data: str) -> dict:
-    """Uses Gemini to draft a structured business newsletter (JSON) from NLP pipeline outputs."""
     if not GEMINI_API_KEY:
         print("WARNING: GEMINI_API_KEY not found. Mocking newsletter.")
         return {"executive_summary": "API mocked.", "deals": []}
@@ -66,19 +65,18 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
         data = response.json()
         raw_text = data['candidates'][0]['content']['parts'][0]['text']
         
-        # Strip markdown fences if Gemini wraps the JSON (happens with longer responses)
+        # gemini sometimes wraps output in markdown fences
         raw_text = raw_text.strip()
         if raw_text.startswith("```"):
-            raw_text = raw_text.split("```", 2)[-1]  # drop opening fence
+            raw_text = raw_text.split("```", 2)[-1]
             if raw_text.startswith("json"):
                 raw_text = raw_text[4:]
-            raw_text = raw_text.rsplit("```", 1)[0]  # drop closing fence
+            raw_text = raw_text.rsplit("```", 1)[0]
         raw_text = raw_text.strip()
         
         try:
             return json.loads(raw_text)
         except json.JSONDecodeError as je:
-            # Fallback: extract the outermost { ... } block via regex
             import re
             print(f"Raw Gemini response (first 500 chars): {raw_text[:500]}")
             match = re.search(r'\{.*\}', raw_text, re.DOTALL)
@@ -94,19 +92,14 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
         return {"executive_summary": "Failed to proxy Gemini API.", "deals": []}
 
 def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "output"):
-    """
-    Takes the structured topics list from the semantic clustering phase, passes them to Gemini for impact analysis, 
-    and iterates via Python to compile the output to a clean business-friendly DOCX file.
-    """
     os.makedirs(output_dir, exist_ok=True)
     df = df.copy()
     
-    # Export CSV Backup of the newly filtered representative items
     csv_path = os.path.join(output_dir, "advanced_nlp_clustered_topics.csv")
     df.to_csv(csv_path, index=False)
     print(f"Clustered NLP dataset exported to {csv_path}")
 
-    # Sanitize text fields to prevent JSON encoding issues in Gemini's response
+    # sanitize before serializing to avoid json encoding issues
     safe_topics = []
     for t in topics_json:
         safe_t = dict(t)
@@ -125,6 +118,7 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
     chunk_size = 10
     max_calls = 2
     
+    # batch into chunks so we always hit 10 deals even when topics > 10
     for i in range(0, min(len(safe_topics), chunk_size * max_calls), chunk_size):
         chunk = safe_topics[i:i + chunk_size]
         json_data = json.dumps(chunk, ensure_ascii=True)
@@ -137,7 +131,6 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
             
         all_deals.extend(chunk_json.get("deals", []))
         
-        # Stop early if we have reached our goal of 10 deals
         if len(all_deals) >= 10:
             break
             
@@ -153,25 +146,20 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
     docx_path = os.path.join(output_dir, "FMCG_Executive_Newsletter.docx")
     doc = Document()
     
-    # Title
     title = doc.add_heading('FMCG Deal Intelligence Report', 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph(f"Report Date: {datetime.now().strftime('%B %d, %Y')}\n")
     
-    # Exec Summary
     doc.add_heading('Executive Summary', level=1)
-    p = doc.add_paragraph(newsletter_json.get("executive_summary", "Summary unavailable."))
+    doc.add_paragraph(newsletter_json.get("executive_summary", "Summary unavailable."))
     
     deals = newsletter_json.get("deals", [])
-    
     doc.add_heading('Top Deals This Period', level=1)
     
     for deal in deals:
-        # Deal Header
         deal_title = f"{deal.get('company_name', 'Unknown Company')} - {deal.get('deal_type', 'Deal')}"
         doc.add_heading(deal_title, level=2)
         
-        # Details with premium formatting
         def add_bold_line(label, value):
             p_line = doc.add_paragraph()
             run = p_line.add_run(f"{label}: ")
@@ -187,7 +175,7 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
         if link:
             add_bold_line("Original Article", link)
             
-        doc.add_paragraph() # Spacer between deals
+        doc.add_paragraph()
         
     doc.save(docx_path)
     print(f"Successfully compiled Business Newsletter to {docx_path}")

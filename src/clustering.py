@@ -8,9 +8,6 @@ from src.relevance import keyword_sieve
 from src.scoring_report import audit_report
 
 def cluster_and_extract_topics(df: pd.DataFrame) -> list:
-    """
-    ORDER: Cluster → FMCG Filter (passes_sieve + cosine_sim) → Intra-cluster near-dedup → Return topics
-    """
     if df.empty: return []
     
     print("\n>>> Phase 3: Semantic Clustering and Topic Extraction <<<")
@@ -24,7 +21,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     total_input = len(df)
     print(f"[Input]  {total_input} articles entering clustering (post exact-dedup)")
 
-    # ── Step 1: Embed ───────────────────────────────────────────────────────
     embedder = load_embedder()
     def get_text_to_embed(row):
         title = str(row.get('title', ''))
@@ -36,7 +32,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     embeddings = np.array(embeddings, dtype=np.float32)
     faiss.normalize_L2(embeddings)
     
-    # FMCG Intent vectors (Multiple intents for better coverage)
     intent_prompts = config['prompts'].get('fmcg_intents', [
         "News about mergers, acquisitions or investments involving fast-moving consumer goods brands and manufacturers"
     ])
@@ -44,17 +39,13 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     intent_vectors = np.array(intent_vectors, dtype=np.float32)
     faiss.normalize_L2(intent_vectors)
     
-    # Pre-compute all cosine scores against all intents and take the MAX
-    # embeddings shape: (N, 768) @ intent_vectors.T shape: (768, num_intents) -> (N, num_intents)
+    # max cosine across all intent prompts per article
     cosine_matrix = embeddings @ intent_vectors.T
     max_cosine_scores = np.max(cosine_matrix, axis=1).tolist()
     
     df['tru_sim'] = max_cosine_scores
     df['passes_sieve'] = df.apply(lambda row: keyword_sieve(get_text_to_embed(row)), axis=1)
 
-    # ── Step 2a: Keyword Sieve Pre-filter ────────────────────────────────────
-    # Run cheap keyword sieve BEFORE HDBSCAN so automobile/unrelated articles
-    # don't contaminate FMCG clusters (they share M&A vocabulary)
     sieve_mask = df['passes_sieve'] == True
     
     rejected_sieve_df = df[~sieve_mask]
@@ -69,7 +60,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
         print("  No articles passed keyword sieve.")
         return []
 
-    # ── Step 2b: HDBSCAN Cluster on FMCG-only articles ───────────────────────
     print(f"\n[Step 2] Running HDBSCAN on {len(fmcg_df)} FMCG articles...")
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=2,
@@ -80,7 +70,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     cluster_labels = clusterer.fit_predict(fmcg_embeddings)
     fmcg_df = fmcg_df.copy()
     fmcg_df['cluster_id'] = cluster_labels
-    # Also update embeddings reference
     embeddings_to_use = fmcg_embeddings
     df_to_use = fmcg_df
 
@@ -89,10 +78,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     n_noise = int((cluster_labels == -1).sum())
     print(f"         → {n_real} event clusters + {n_noise} noise points from {len(fmcg_df)} sieve-passed articles")
 
-    # ── Step 3: FMCG Relevance Filter per cluster ──────────────────────────
-    # For REAL clusters: centroid OR any article must pass cosine threshold
-    #                    AND at least 1 article must pass the keyword sieve
-    # For NOISE points:  article must pass cosine threshold AND keyword sieve
     print(f"\n[Step 3] FMCG Relevance Filter (sieve + cosine_sim >= {threshold}) per cluster:")
     
     valid_topics = []
@@ -102,7 +87,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     
     for c_id in sorted(unique_clusters):
         if c_id == -1:
-            # Noise points: all already passed keyword sieve, just check cosine
             noise_indices = fmcg_df[fmcg_df['cluster_id'] == -1].index
             for idx in noise_indices:
                 sim = fmcg_df.loc[idx, 'tru_sim']
@@ -131,7 +115,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                     print(f"  [NOISE REJECTED] {title_preview}... | sim={sim:.3f}<{threshold}")
             continue
         
-        # Real cluster — keyword sieve already passed, check cosine
         cluster_mask = fmcg_df['cluster_id'] == c_id
         cluster_df = fmcg_df[cluster_mask].copy()
         cluster_emb_arr = fmcg_embeddings[cluster_mask.values]
@@ -140,8 +123,6 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
         max_sim = max(cluster_scores)
         centroid = np.mean(cluster_emb_arr, axis=0)
         faiss.normalize_L2(np.array([centroid], dtype=np.float32))
-        
-        # Centroid similarity is the max similarity against any intent vector
         centroid_sim = float(np.max(centroid @ intent_vectors.T))
         
         cosine_ok = centroid_sim >= (threshold - 0.05) or max_sim >= threshold
@@ -155,9 +136,8 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
             
         for _, row in cluster_df.iterrows():
             audit_report.log_relevance_item(-1, str(row.get('title', '')), True, float(row.get('tru_sim', 0.0)), float(threshold), "N/A", f"ACCEPTED (Cluster {c_id})")
-        # (No sieve check needed here — sieve was applied before HDBSCAN)
 
-        # ── Step 4: Intra-cluster near-dedup ──────────────────────────────
+        # intra-cluster near-dedup to find the most credible rep article
         cluster_df_copy = cluster_df.copy()
         cluster_df_copy['sim_score'] = cluster_scores
         d = cluster_emb_arr.shape[1]
