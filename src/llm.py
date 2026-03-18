@@ -35,7 +35,8 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
                 "strategic_impact": "2-3 sentences explaining the overarching business value of this Topic/Event and why a CEO should care.",
                 "financials": "Extracted monetary value or 'Undisclosed'",
                 "location": "Countries/Regions",
-                "source": "domain name"
+                "source": "domain name",
+                "news_link": "Exact URL link to the original article"
             }}
         ]
     }}
@@ -52,7 +53,11 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
     
     payload = {
         "contents": [{"parts": [{"text": system_prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json"}
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+            "temperature": 0.2
+        }
     }
     
     try:
@@ -109,13 +114,37 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
         rep = dict(safe_t.get('representative_article', {}))
         rep['title'] = rep.get('title', '').replace('\n', ' ').replace('\r', '')
         rep['summary'] = rep.get('summary', '').replace('\n', ' ').replace('\r', '').replace('"', "'")
+        rep['link'] = rep.get('link', '')
         safe_t['representative_article'] = rep
         safe_topics.append(safe_t)
     
-    json_data = json.dumps(safe_topics, ensure_ascii=True)
-    
     print("Drafting advanced NLP newsletter via Gemini (Topic-Based)...")
-    newsletter_json = prompt_gemini_newsletter(json_data)
+    
+    all_deals = []
+    exec_summary = ""
+    chunk_size = 10
+    max_calls = 2
+    
+    for i in range(0, min(len(safe_topics), chunk_size * max_calls), chunk_size):
+        chunk = safe_topics[i:i + chunk_size]
+        json_data = json.dumps(chunk, ensure_ascii=True)
+        print(f"  -> Sending batch of {len(chunk)} topics to Gemini...")
+        
+        chunk_json = prompt_gemini_newsletter(json_data)
+        
+        if not exec_summary:
+            exec_summary = chunk_json.get("executive_summary", "")
+            
+        all_deals.extend(chunk_json.get("deals", []))
+        
+        # Stop early if we have reached our goal of 10 deals
+        if len(all_deals) >= 10:
+            break
+            
+    newsletter_json = {
+        "executive_summary": exec_summary or "Summary unavailable.",
+        "deals": all_deals[:10]
+    }
     
     from docx import Document
     from docx.shared import Pt
@@ -135,18 +164,29 @@ def generate_newsletter(topics_json: list, df: pd.DataFrame, output_dir: str = "
     
     deals = newsletter_json.get("deals", [])
     
-    doc.add_heading(f'Top Deals This Period', level=1)
+    doc.add_heading('Top Deals This Period', level=1)
     
     for deal in deals:
         # Deal Header
         deal_title = f"{deal.get('company_name', 'Unknown Company')} - {deal.get('deal_type', 'Deal')}"
         doc.add_heading(deal_title, level=2)
         
-        # Details without raw markdown
-        doc.add_paragraph(f"Strategic Impact: {deal.get('strategic_impact', 'N/A')}")
-        doc.add_paragraph(f"Financials / Value: {deal.get('financials', 'Undisclosed')}")
-        doc.add_paragraph(f"Key Locations: {deal.get('location', 'Unknown')}")
-        doc.add_paragraph(f"Source: {deal.get('source', 'Unknown')}")
+        # Details with premium formatting
+        def add_bold_line(label, value):
+            p_line = doc.add_paragraph()
+            run = p_line.add_run(f"{label}: ")
+            run.bold = True
+            p_line.add_run(str(value))
+
+        add_bold_line("Strategic Impact", deal.get('strategic_impact', 'N/A'))
+        add_bold_line("Financials / Value", deal.get('financials', 'Undisclosed'))
+        add_bold_line("Key Locations", deal.get('location', 'Unknown'))
+        add_bold_line("Source", deal.get('source', 'Unknown'))
+        
+        link = deal.get('news_link', '')
+        if link:
+            add_bold_line("Original Article", link)
+            
         doc.add_paragraph() # Spacer between deals
         
     doc.save(docx_path)

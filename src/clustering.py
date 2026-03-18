@@ -108,6 +108,7 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                         "topic_title": str(article['title']),
                         "representative_article": {
                             "id": str(article.get('id', '')),
+                            "link": str(article.get('link', '')),
                             "title": str(article['title']),
                             "source": str(article['source_domain']),
                             "date": str(article['published_at']),
@@ -179,6 +180,7 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
             "topic_title": str(rep['title']),
             "representative_article": {
                 "id": str(rep.get('id', '')),
+                "link": str(rep.get('link', '')),
                 "title": str(rep['title']),
                 "source": str(rep['source_domain']),
                 "date": str(rep['published_at']),
