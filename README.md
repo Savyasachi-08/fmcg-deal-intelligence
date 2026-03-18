@@ -11,9 +11,10 @@ The pipeline runs in 6 sequential phases:
 1. **Data Input** — Either simulates a sample dataset or fetches live FMCG news via RSS feeds
 2. **Normalization & Exact Dedup** — Cleans URLs and dates, hashes content to drop identical duplicates
 3. **Semantic Clustering** — Groups related articles into real-world events using HDBSCAN on `all-mpnet-base-v2` embeddings. A dual-gate filter (keyword sieve + cosine similarity vs. 10 FMCG intent prompts) ensures only relevant deals make it through
-4. **NLP Extraction** — Runs spaCy to extract organizations, locations, and monetary values from representative articles
-5. **Gemini Newsletter** — Sends clustered topics to Gemini 2.0 Flash (in batches of up to 10) to generate a professional Word document newsletter with strategic analysis, financials, and source links
-6. **Audit Report** — Exports a timestamped Excel file with deduplication decisions, relevance scores, and the config-driven guidelines used
+4. **NLP Extraction** — Runs spaCy to extract organizations, locations, and monetary values from the grouped articles
+5. **Cluster Breakdown Report** — Generates a transparent `Cluster_Breakdown_Report.docx` immediately before LLM processing, literally listing out every article and its publisher that successfully parsed into a given event cluster.
+6. **Gemini Newsletter** — Takes the Top 10 validated clusters and makes **1 API call per cluster** to Gemini 2.0 Flash. The model synthesizes the entirely of the cluster's context into a single unified business headline, 2-4 bullet points, and extracts the top 2 source URLs
+7. **Audit Report** — Exports a timestamped Excel file with deduplication decisions, relevance scores, and the config-driven guidelines used
 
 ---
 
@@ -127,6 +128,11 @@ All key parameters live in `config.yaml` — no code changes needed:
 | `credibility` | Per-domain trust scores used as tie-breakers during deduplication |
 | `fmcg_intents` | The list of intent prompts the embedding model compares against |
 
+### Tuning the Live Feeds
+By default, `scripts/fetch_live_data.py` uses Google News RSS targeted specifically at major financial wire services (`reuters.com`, `bloomberg.com`, etc.) over a **7-day window**. 
+
+If you want to pull data from different domains (e.g. `techcrunch.com`), remove the strict `site:` filter directly from the `FMCG_URL` in `fetch_live_data.py`. 
+
 ---
 
 ## Outputs
@@ -135,6 +141,7 @@ After running, check the `output/` folder:
 
 | File | Description |
 |---|---|
-| `FMCG_Executive_Newsletter.docx` | The final executive newsletter with deal summaries, financials, locations, and source links |
+| `FMCG_Executive_Newsletter.docx` | The final executive newsletter with overarching strategic summaries, individual deal bullet points, and top-tier source links |
+| `Cluster_Breakdown_Report.docx` | A complete list of all HDBSCAN clusters formed, showing exactly which articles (and from which publisher) were grouped together for the LLM to process |
 | `advanced_nlp_clustered_topics.csv` | The deduplicated and clustered article dataset used as input to Gemini |
 | `similarity_scores_<timestamp>.xlsx` | Audit report with 3 sheets: Deduplication decisions, Relevance scores, and Guidelines & Assumptions |
