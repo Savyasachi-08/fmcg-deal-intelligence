@@ -6,7 +6,7 @@ pipeline:
 thresholds:
   exact_deduplicate: true
   near_duplicate_sim: 0.90
-  relevance_sim: 0.20
+  relevance_sim: 0.25
 
 credibility:
   "reuters.com": 0.95
@@ -18,4 +18,14 @@ credibility:
   "unknownblog.com": 0.30
 
 prompts:
-  fmcg_intent: "News about mergers, acquisitions or investments involving fast-moving consumer goods brands and manufacturers"
+  fmcg_intents:
+    - "company acquires stake in a food or consumer brand"
+    - "startup raises funding in FMCG or grocery sector"
+    - "venture capital invests in a consumer goods startup"
+    - "private equity firm buys stake in a packaged food company"
+    - "merger between consumer brands or FMCG companies"
+    - "D2C brand raises investment for food, beauty or household products"
+    - "grocery or quick commerce startup receives funding"
+    - "acquisition of a skincare, cosmetics or personal care brand"
+    - "investment in beverage, dairy or packaged food company"
+    - "consumer goods company expansion through acquisition or funding"

@@ -7,9 +7,8 @@ import pandas as pd
 from scripts.generate_jsonl import generate_jsonl
 from scripts.fetch_live_data import fetch_live_data
 from src.normalization import load_and_normalize
-from src.deduplication import semantic_deduplicate
+from src.clustering import cluster_and_extract_topics
 from src.extraction import extract_metadata
-from src.relevance import score_relevance
 from src.llm import generate_newsletter
 from src.scoring_report import audit_report
 
@@ -33,27 +32,35 @@ def run_advanced_pipeline(mode="sample"):
     norm_df = load_and_normalize(dataset_path)
     print(f"Items remaining after normalization: {len(norm_df)}")
 
-    # 3. Semantic Near-Deduplication
-    print("\n>>> Phase 3: Semantic Near-Deduplication <<<")
-    dedup_df = semantic_deduplicate(norm_df)
-    print(f"Items remaining after exact & semantic deduplication: {len(dedup_df)}")
-
-    # 4. Entity & Category Extraction (spaCy)
-    print("\n>>> Phase 4: NLP Extraction (spaCy) <<<")
-    extracted_df = extract_metadata(dedup_df)
+    # 3. Semantic Clustering & Relevance Filtration
+    topics_json = cluster_and_extract_topics(norm_df)
     
-    # 5. Semantic Relevance Scoring
-    print("\n>>> Phase 5: Semantic Intent Relevance Filtering <<<")
-    # We pass the extracted_df and apply the keyword sieve + embedding scoring logic
-    relevant_df = score_relevance(extracted_df)
+    if not topics_json:
+        print("No valid FMCG topics found.")
+        return
 
-    # 6. Final LLM Generation
-    print("\n>>> Phase 6: Gemini Newsletter Formatting <<<")
-    generate_newsletter(relevant_df, output_dir="output")
+    # Extract the representative raw DataFrame rows for spaCy extraction
+    rep_df = pd.DataFrame([t['raw_row'] for t in topics_json])
 
-    # 7. Export Similarity Audit Report
-    print("\n>>> Phase 7: Exporting Similarity Audit Report <<<")
-    audit_report.export(output_dir="output")
+    # 4. Entity & Category Extraction (spaCy) - ONLY on the representative cluster articles
+    print("\n>>> Phase 4: NLP Extraction (spaCy) <<<")
+    extracted_df = extract_metadata(rep_df)
+    
+    # We update the topics_json with the new spaCy extractions
+    for i, (_, row) in enumerate(extracted_df.iterrows()):
+        # Match back to the topics list using positional enumeration
+        topics_json[i]['representative_article']['deal_type'] = row.get('predicted_deal_type', 'Other')
+        topics_json[i]['representative_article']['organizations'] = row.get('organizations', '')
+        topics_json[i]['representative_article']['locations'] = row.get('locations', '')
+        topics_json[i]['representative_article']['monetary_values'] = row.get('monetary_values', '')
+        
+        # Remove the pandas Series before JSON serialization
+        if 'raw_row' in topics_json[i]:
+            del topics_json[i]['raw_row']
+
+    # 5. Final LLM Generation
+    print("\n>>> Phase 5: Gemini Topic-Based Newsletter Formatting <<<")
+    generate_newsletter(topics_json, extracted_df, output_dir="output")
 
     print("\n==================================================")
     print("Advanced NLP Pipeline Completed Successfully.")
