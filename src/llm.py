@@ -42,9 +42,8 @@ def prompt_gemini_newsletter(text_data: str) -> dict:
     
     RULES:
     1. You are receiving pre-clustered Topics representing distinct real-world events. 
-    2. Select ONLY the TOP 10 most globally significant or highest-value Topics/Events. 
-    3. If there are fewer than 10 Topics, include all of them.
-    4. Focus ENTIRELY on business value and strategic impact. Do not mention "clusters", "topics", "algorithms", or the data pipeline.
+    2. You MUST process and include EVERY SINGLE TOPIC provided in the input array. Do not arbitrarily skip or filter any topics.
+    3. Focus ENTIRELY on business value and strategic impact. Do not mention "clusters", "topics", "algorithms", or the data pipeline.
     
     Input JSON Records (Clustered Topics):
     {text_data}
