@@ -62,6 +62,10 @@ def run_advanced_pipeline(mode="sample"):
     print("\n>>> Phase 5: Gemini Topic-Based Newsletter Formatting <<<")
     generate_newsletter(topics_json, extracted_df, output_dir="output")
 
+    # 6. Similarity Report Export
+    print("\n>>> Phase 6: Exporting Audit Report <<<")
+    audit_report.export(output_dir="output")
+
     print("\n==================================================")
     print("Advanced NLP Pipeline Completed Successfully.")
     print("==================================================")

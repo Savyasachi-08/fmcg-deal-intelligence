@@ -5,6 +5,7 @@ import hdbscan
 from src.normalization import load_config
 from src.deduplication import load_embedder, get_credibility_score
 from src.relevance import keyword_sieve
+from src.scoring_report import audit_report
 
 def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     """
@@ -55,6 +56,11 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
     # Run cheap keyword sieve BEFORE HDBSCAN so automobile/unrelated articles
     # don't contaminate FMCG clusters (they share M&A vocabulary)
     sieve_mask = df['passes_sieve'] == True
+    
+    rejected_sieve_df = df[~sieve_mask]
+    for idx, row in rejected_sieve_df.iterrows():
+        audit_report.log_relevance_item(idx, str(row.get('title', '')), False, float(row.get('tru_sim', 0.0)), float(threshold), "N/A", "REJECTED (No Sieve Match)")
+        
     fmcg_df = df[sieve_mask].reset_index(drop=True)
     fmcg_embeddings = embeddings[sieve_mask.values]
     print(f"[Sieve]  Keyword sieve: {len(fmcg_df)} / {total_input} articles contain FMCG keywords")
@@ -103,6 +109,7 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                 title_preview = str(fmcg_df.loc[idx, 'title'])[:50]
                 if sim >= threshold:
                     article = fmcg_df.loc[idx]
+                    audit_report.log_relevance_item(idx, str(title_preview), True, float(sim), float(threshold), "N/A", "ACCEPTED")
                     valid_topics.append({
                         "topic_id": f"noise_{idx}",
                         "topic_title": str(article['title']),
@@ -119,6 +126,7 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                         "raw_row": article
                     })
                 else:
+                    audit_report.log_relevance_item(idx, str(title_preview), True, float(sim), float(threshold), "N/A", "REJECTED (Low Cosine)")
                     noise_rejected += 1
                     print(f"  [NOISE REJECTED] {title_preview}... | sim={sim:.3f}<{threshold}")
             continue
@@ -140,8 +148,13 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
         
         if not cosine_ok:
             clusters_rejected_cosine += 1
+            for _, row in cluster_df.iterrows():
+                audit_report.log_relevance_item(-1, str(row.get('title', '')), True, float(row.get('tru_sim', 0.0)), float(threshold), "N/A", f"REJECTED (Cluster {c_id} Low Cosine)")
             print(f"  [CLUSTER {c_id} REJECTED - low cosine] centroid={centroid_sim:.3f}, max={max_sim:.3f}, size={len(cluster_df)}")
             continue
+            
+        for _, row in cluster_df.iterrows():
+            audit_report.log_relevance_item(-1, str(row.get('title', '')), True, float(row.get('tru_sim', 0.0)), float(threshold), "N/A", f"ACCEPTED (Cluster {c_id})")
         # (No sieve check needed here — sieve was applied before HDBSCAN)
 
         # ── Step 4: Intra-cluster near-dedup ──────────────────────────────
@@ -162,12 +175,21 @@ def cluster_and_extract_topics(df: pd.DataFrame) -> list:
                 if D[i][k_idx] >= dup_threshold:
                     cred_i = cluster_df_copy.iloc[i]['credibility']
                     cred_j = cluster_df_copy.iloc[j]['credibility']
-                    if cred_i > cred_j: to_drop_local.add(j)
-                    elif cred_j > cred_i: to_drop_local.add(i)
+                    if cred_i > cred_j: 
+                        to_drop_local.add(j)
+                        audit_report.log_dedup_pair(i, str(cluster_df_copy.iloc[i]['title']), j, str(cluster_df_copy.iloc[j]['title']), float(D[i][k_idx]), float(dup_threshold), float(cred_i), float(cred_j), "Drop B (Low Cred)", i)
+                    elif cred_j > cred_i: 
+                        to_drop_local.add(i)
+                        audit_report.log_dedup_pair(i, str(cluster_df_copy.iloc[i]['title']), j, str(cluster_df_copy.iloc[j]['title']), float(D[i][k_idx]), float(dup_threshold), float(cred_i), float(cred_j), "Drop A (Low Cred)", j)
                     else:
                         date_i = cluster_df_copy.iloc[i]['published_at']
                         date_j = cluster_df_copy.iloc[j]['published_at']
-                        to_drop_local.add(i if date_i < date_j else j)
+                        if str(date_i) < str(date_j):
+                            to_drop_local.add(i)
+                            audit_report.log_dedup_pair(i, str(cluster_df_copy.iloc[i]['title']), j, str(cluster_df_copy.iloc[j]['title']), float(D[i][k_idx]), float(dup_threshold), float(cred_i), float(cred_j), "Drop A (Older)", j)
+                        else:
+                            to_drop_local.add(j)
+                            audit_report.log_dedup_pair(i, str(cluster_df_copy.iloc[i]['title']), j, str(cluster_df_copy.iloc[j]['title']), float(D[i][k_idx]), float(dup_threshold), float(cred_i), float(cred_j), "Drop B (Older/Equal)", i)
         
         clean_df = cluster_df_copy.drop(cluster_df_copy.index[list(to_drop_local)])
         if clean_df.empty: continue
