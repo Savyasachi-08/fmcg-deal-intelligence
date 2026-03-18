@@ -15,10 +15,6 @@ def get_credibility_score(domain: str, config: dict) -> float:
     return cred.get(domain.lower(), 0.5)
 
 def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Drops near-duplicates using content embeddings and faiss similarity search.
-    Resolves ties by Newest + Highest Credibility.
-    """
     if df.empty:
         return df
         
@@ -31,13 +27,10 @@ def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
         dedup_embedding_strategy="Title + First 600 words of content",
     )
     
-    # Assign credibility scores for tie-breaking
     df['credibility'] = df['source_domain'].apply(lambda x: get_credibility_score(x, config))
-    
     df = df.reset_index(drop=True)
     embedder = load_embedder()
     
-    # Embed Title + First 600 words of content
     def get_text_to_embed(row):
         title = str(row.get('title', ''))
         content = str(row.get('content', ''))
@@ -47,7 +40,6 @@ def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
     texts = df.apply(get_text_to_embed, axis=1).tolist()
     embeddings = embedder.encode(texts)
     
-    # Compute similarities using faiss Vector DB
     embeddings = np.array(embeddings, dtype=np.float32)
     faiss.normalize_L2(embeddings)
     
@@ -56,7 +48,7 @@ def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
     index.add(embeddings)
     
     k = len(embeddings)
-    D, I = index.search(embeddings, k) # query against itself
+    D, I = index.search(embeddings, k)
     
     to_drop = set()
     duplicate_found = False
@@ -67,7 +59,7 @@ def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
             
         for k_idx in range(k):
             j = I[i][k_idx]
-            if i >= j: # We only care about pairs where i < j (already deduped or self)
+            if i >= j:
                 continue
                 
             sim_score = D[i][k_idx]
@@ -77,11 +69,9 @@ def semantic_deduplicate(df: pd.DataFrame) -> pd.DataFrame:
                 
                 duplicate_found = True
                     
-                # Decide which to keep based on Credibility then Newest
                 cred_i = df.loc[i, 'credibility']
                 cred_j = df.loc[j, 'credibility']
                 
-                # If credibility is identical, check published_at date
                 if cred_i == cred_j:
                     date_i = df.loc[i, 'published_at']
                     date_j = df.loc[j, 'published_at']
